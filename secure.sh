@@ -129,44 +129,98 @@ else
     done
 fi
 
-# Créer l'utilisateur avec mot de passe désactivé temporairement
+# Créer l'utilisateur sans mot de passe (SSH key uniquement)
 adduser --disabled-password --gecos "" "$NEWUSER" || { log_error "Échec de création de l'utilisateur"; exit 1; }
 usermod -aG sudo "$NEWUSER"
 
-# Définir le mot de passe
-if [[ -n "${VPS_PASSWORD:-}" ]]; then
-    # Mot de passe fourni via variable d'environnement
-    log "Définition du mot de passe depuis VPS_PASSWORD"
-    echo "$NEWUSER:$VPS_PASSWORD" | chpasswd
-    if [[ $? -eq 0 ]]; then
-        log "Mot de passe défini avec succès"
-    else
-        log_error "Échec de définition du mot de passe"
-    fi
-else
-    # Demander le mot de passe interactivement
-    log "Définition du mot de passe pour $NEWUSER"
-    echo ""
-    if ! passwd "$NEWUSER" < /dev/tty; then
-        log_error "Échec de définition du mot de passe"
-        log_warning "Vous pourrez définir le mot de passe plus tard avec : sudo passwd $NEWUSER"
-    fi
-fi
-
 log "Utilisateur $NEWUSER créé et ajouté au groupe sudo"
 
-# Configurer SSH key (optionnel mais recommandé)
-read -rp "Voulez-vous configurer une clé SSH pour $NEWUSER ? (y/n) : " setup_key < /dev/tty
-if [[ "$setup_key" =~ ^[Yy]$ ]]; then
+# Configuration OBLIGATOIRE de la clé SSH (authentification par clé uniquement)
+log "=== 🔑 Configuration de la clé SSH (OBLIGATOIRE) ==="
+log_warning "Ce serveur utilisera UNIQUEMENT l'authentification par clé SSH (pas de mot de passe)"
+
+SSH_KEY_CONFIGURED=false
+
+# Permettre de passer la clé SSH via variable d'environnement
+if [[ -n "${VPS_SSH_KEY:-}" ]]; then
+    log "Utilisation de la clé SSH depuis VPS_SSH_KEY"
     su - "$NEWUSER" -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
-    log "Entrez votre clé SSH publique (ou laissez vide pour sauter) :"
-    read -r ssh_key < /dev/tty
-    if [[ -n "$ssh_key" ]]; then
-        echo "$ssh_key" | su - "$NEWUSER" -c "tee ~/.ssh/authorized_keys > /dev/null"
-        su - "$NEWUSER" -c "chmod 600 ~/.ssh/authorized_keys"
-        log "Clé SSH configurée pour $NEWUSER"
-    fi
+    echo "$VPS_SSH_KEY" | su - "$NEWUSER" -c "tee ~/.ssh/authorized_keys > /dev/null"
+    su - "$NEWUSER" -c "chmod 600 ~/.ssh/authorized_keys"
+    log "Clé SSH configurée avec succès depuis VPS_SSH_KEY"
+    SSH_KEY_CONFIGURED=true
+else
+    # Demander la clé SSH interactivement
+    echo ""
+    log "Vous devez fournir votre clé SSH publique pour pouvoir vous connecter"
+    log "Où se trouve votre clé SSH publique ?"
+    echo "1) Je vais la coller maintenant"
+    echo "2) Elle est dans ~/.ssh/id_rsa.pub (ou id_ed25519.pub) sur ce serveur"
+    echo "3) Je veux la générer maintenant"
+
+    read -rp "Choix (1/2/3) : " ssh_key_choice < /dev/tty
+
+    case "$ssh_key_choice" in
+        1)
+            log "Collez votre clé SSH publique (commence par ssh-rsa ou ssh-ed25519) :"
+            read -r ssh_key < /dev/tty
+            if [[ -n "$ssh_key" ]]; then
+                su - "$NEWUSER" -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+                echo "$ssh_key" | su - "$NEWUSER" -c "tee ~/.ssh/authorized_keys > /dev/null"
+                su - "$NEWUSER" -c "chmod 600 ~/.ssh/authorized_keys"
+                log "Clé SSH configurée avec succès"
+                SSH_KEY_CONFIGURED=true
+            fi
+            ;;
+        2)
+            # Copier depuis l'utilisateur root actuel
+            if [[ -f ~/.ssh/id_rsa.pub ]]; then
+                su - "$NEWUSER" -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+                cat ~/.ssh/id_rsa.pub | su - "$NEWUSER" -c "tee ~/.ssh/authorized_keys > /dev/null"
+                su - "$NEWUSER" -c "chmod 600 ~/.ssh/authorized_keys"
+                log "Clé SSH copiée depuis ~/.ssh/id_rsa.pub"
+                SSH_KEY_CONFIGURED=true
+            elif [[ -f ~/.ssh/id_ed25519.pub ]]; then
+                su - "$NEWUSER" -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+                cat ~/.ssh/id_ed25519.pub | su - "$NEWUSER" -c "tee ~/.ssh/authorized_keys > /dev/null"
+                su - "$NEWUSER" -c "chmod 600 ~/.ssh/authorized_keys"
+                log "Clé SSH copiée depuis ~/.ssh/id_ed25519.pub"
+                SSH_KEY_CONFIGURED=true
+            else
+                log_error "Aucune clé SSH trouvée dans ~/.ssh/"
+            fi
+            ;;
+        3)
+            log "Génération d'une nouvelle paire de clés SSH..."
+            su - "$NEWUSER" -c "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N '' -C '$NEWUSER@$(hostname)'"
+            su - "$NEWUSER" -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+            su - "$NEWUSER" -c "cat ~/.ssh/id_ed25519.pub > ~/.ssh/authorized_keys"
+            su - "$NEWUSER" -c "chmod 600 ~/.ssh/authorized_keys"
+            log "Clé SSH générée avec succès"
+            log_warning "IMPORTANT : Copiez la clé privée ci-dessous sur votre machine locale !"
+            echo "========== CLÉ PRIVÉE (À SAUVEGARDER) =========="
+            su - "$NEWUSER" -c "cat ~/.ssh/id_ed25519"
+            echo "=================================================="
+            log_warning "Sauvegardez cette clé dans un fichier sur votre machine locale (ex: ~/.ssh/vps_key)"
+            log_warning "Puis utilisez : ssh -i ~/.ssh/vps_key $NEWUSER@IP -p PORT"
+            read -rp "Appuyez sur Entrée une fois que vous avez sauvegardé la clé..." < /dev/tty
+            SSH_KEY_CONFIGURED=true
+            ;;
+        *)
+            log_error "Choix invalide"
+            ;;
+    esac
 fi
+
+# Vérifier que la clé SSH a bien été configurée
+if [[ "$SSH_KEY_CONFIGURED" != "true" ]]; then
+    log_error "ERREUR CRITIQUE : Aucune clé SSH configurée !"
+    log_error "Vous ne pourrez pas vous connecter après la désactivation du mot de passe"
+    log_error "Le script va s'arrêter pour éviter de vous bloquer"
+    exit 1
+fi
+
+log "Clé SSH configurée avec succès pour $NEWUSER"
 
 # --- Sécurisation SSH ---
 log "=== 🔐 Configuration SSH ==="
@@ -184,36 +238,59 @@ if [[ ! "$use_default_port" =~ ^[Yy]$ ]]; then
     done
 fi
 
-# Configuration SSH sécurisée
+# Configuration SSH sécurisée - AUTHENTIFICATION PAR CLÉ UNIQUEMENT
 cat >> /etc/ssh/sshd_config.d/99-custom-security.conf <<EOF
-# Configuration de sécurité personnalisée
+# Configuration de sécurité personnalisée - SSH Key Only
 Port $CUSTOM_SSH_PORT
 PermitRootLogin no
-PasswordAuthentication yes
+
+# Authentification par clé SSH UNIQUEMENT (pas de mot de passe)
 PubkeyAuthentication yes
+PasswordAuthentication no
 ChallengeResponseAuthentication no
+KbdInteractiveAuthentication no
 UsePAM yes
+
+# Restrictions de sécurité
 X11Forwarding no
 MaxAuthTries 3
 MaxSessions 5
 ClientAliveInterval 300
 ClientAliveCountMax 2
 AllowUsers $NEWUSER
-Protocol 2
+
+# Désactiver les méthodes d'authentification faibles
+PermitEmptyPasswords no
+AuthenticationMethods publickey
 EOF
 
 # Tester la configuration SSH avant de redémarrer
 if sshd -t; then
     systemctl restart ssh || systemctl restart sshd
-    log "SSH configuré sur le port $CUSTOM_SSH_PORT (root désactivé)"
+    log "SSH configuré sur le port $CUSTOM_SSH_PORT"
+    log "Authentification par clé SSH UNIQUEMENT (mot de passe désactivé)"
 else
     log_error "Configuration SSH invalide ! Restauration du backup..."
     cp "$BACKUP_DIR/sshd_config" /etc/ssh/sshd_config
     exit 1
 fi
 
-log_warning "IMPORTANT : Testez la connexion SSH dans une nouvelle session AVANT de fermer celle-ci !"
-log_warning "Commande : ssh $NEWUSER@$(hostname -I | awk '{print $1}') -p $CUSTOM_SSH_PORT"
+echo ""
+log_warning "╔════════════════════════════════════════════════════════════════╗"
+log_warning "║  ATTENTION : AUTHENTIFICATION PAR CLÉ SSH UNIQUEMENT          ║"
+log_warning "╚════════════════════════════════════════════════════════════════╝"
+echo ""
+log_warning "⚠️  L'authentification par mot de passe est DÉSACTIVÉE"
+log_warning "⚠️  Vous DEVEZ utiliser votre clé SSH pour vous connecter"
+echo ""
+log_warning "🔑 Commande de connexion :"
+echo "   ssh $NEWUSER@$(hostname -I | awk '{print $1}') -p $CUSTOM_SSH_PORT"
+echo ""
+log_warning "📋 AVANT DE FERMER CETTE SESSION :"
+echo "   1. Ouvrez un NOUVEL onglet/terminal"
+echo "   2. Testez la connexion avec la commande ci-dessus"
+echo "   3. SEULEMENT si ça fonctionne, fermez cette session"
+echo ""
 
 # --- UFW Firewall ---
 log "=== 🔥 Configuration du pare-feu UFW ==="
@@ -404,6 +481,7 @@ echo "   🔒 RÉSUMÉ DE LA CONFIGURATION"
 echo "=========================================="
 echo "🧍 Utilisateur admin    : $NEWUSER"
 echo "🔐 Port SSH             : $CUSTOM_SSH_PORT"
+echo "🔑 Auth SSH             : Clé uniquement (mot de passe DÉSACTIVÉ)"
 echo "🔥 Pare-feu UFW         : Activé"
 echo "🧱 Fail2ban             : Actif"
 echo "🛡️  Sysctl hardening    : Appliqué"
@@ -415,13 +493,27 @@ echo "📝 Logs                 : $LOG_FILE"
 echo "💾 Backups config       : $BACKUP_DIR"
 echo "=========================================="
 echo ""
-log_warning "IMPORTANT - ACTIONS REQUISES :"
-echo "1. Testez la connexion SSH dans un NOUVEL onglet AVANT de fermer celui-ci :"
-echo "   ssh $NEWUSER@$(hostname -I | awk '{print $1}') -p $CUSTOM_SSH_PORT"
+log_warning "╔════════════════════════════════════════════════════════════════╗"
+log_warning "║          IMPORTANT - ACTIONS REQUISES IMMÉDIATEMENT           ║"
+log_warning "╚════════════════════════════════════════════════════════════════╝"
 echo ""
-echo "2. Si la connexion fonctionne, vous pouvez redémarrer le serveur :"
-echo "   sudo reboot"
+log_warning "⚠️  ATTENTION : Authentification par MOT DE PASSE DÉSACTIVÉE !"
+log_warning "⚠️  Seule l'authentification par CLÉ SSH est autorisée"
 echo ""
-echo "3. En cas de problème, les backups sont dans : $BACKUP_DIR"
+echo "1️⃣  NE FERMEZ PAS cette session SSH maintenant !"
 echo ""
-log "Script terminé. Consultez les logs pour plus de détails."
+echo "2️⃣  Ouvrez un NOUVEL onglet/terminal et testez la connexion :"
+echo "    ssh $NEWUSER@$(hostname -I | awk '{print $1}') -p $CUSTOM_SSH_PORT"
+echo ""
+echo "3️⃣  Si la connexion fonctionne ✅, vous pouvez :"
+echo "    - Fermer cette ancienne session"
+echo "    - Optionnel : Redémarrer le serveur (sudo reboot)"
+echo ""
+echo "4️⃣  Si la connexion échoue ❌ :"
+echo "    - Gardez cette session ouverte"
+echo "    - Restaurez : sudo cp $BACKUP_DIR/sshd_config /etc/ssh/sshd_config"
+echo "    - Redémarrez SSH : sudo systemctl restart ssh"
+echo ""
+log_warning "📌 Si vous êtes bloqué, accédez via la console web de votre hébergeur"
+echo ""
+log "Script terminé. Consultez les logs pour plus de détails : $LOG_FILE"

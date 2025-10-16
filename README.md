@@ -11,6 +11,7 @@ Script Bash professionnel pour sécuriser automatiquement vos serveurs VPS Ubunt
 
 - ✅ **Mise à jour complète** du système
 - 👤 **Création utilisateur admin** non-root avec sudo
+- 🔑 **Authentification SSH par clé uniquement** (pas de mot de passe)
 - 🔐 **Durcissement SSH** (changement port, désactivation root, limitations)
 - 🔥 **Pare-feu UFW** avec règles de base
 - 🧱 **Fail2ban** contre les attaques par force brute
@@ -37,14 +38,14 @@ Prédéfinir le nom d'utilisateur :
 curl -fsSL https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh | sudo VPS_USER=adminvps bash
 ```
 
-### Méthode 3 : Installation entièrement automatique
-
-⚠️ **Attention** : Le mot de passe sera visible dans l'historique !
+### Méthode 3 : Installation entièrement automatique avec clé SSH
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh | \
-  sudo VPS_USER=adminvps VPS_PASSWORD='MotDePasse123!' bash
+  sudo VPS_USER=adminvps VPS_SSH_KEY="ssh-ed25519 AAAA..." bash
 ```
+
+Remplacez `ssh-ed25519 AAAA...` par votre clé SSH publique complète.
 
 ### Méthode 4 : Téléchargement et inspection
 
@@ -67,12 +68,14 @@ sudo ./secure.sh
 ## 🔧 Configuration appliquée
 
 ### SSH (Port 28 par défaut)
+- ✅ **Authentification par clé SSH uniquement** (mot de passe désactivé)
 - ✅ Root login désactivé
 - ✅ Port personnalisable
 - ✅ MaxAuthTries: 3
 - ✅ MaxSessions: 5
 - ✅ ClientAlive: 300s
 - ✅ AllowUsers configuré
+- ✅ AuthenticationMethods: publickey
 
 ### Pare-feu UFW
 - ✅ SSH (port personnalisé)
