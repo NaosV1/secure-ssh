@@ -10,6 +10,16 @@ Connectez-vous à votre VPS en SSH, puis exécutez :
 curl -fsSL https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh | sudo bash
 ```
 
+### Méthode 1b : Installation automatisée avec nom d'utilisateur prédéfini
+
+Si vous voulez automatiser et éviter les prompts interactifs pour le nom d'utilisateur :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh | sudo VPS_USER=adminvps bash
+```
+
+Remplacez `adminvps` par le nom d'utilisateur souhaité.
+
 ### Méthode 2 : Téléchargement puis exécution (plus sûr)
 
 Si vous souhaitez inspecter le script avant de l'exécuter :

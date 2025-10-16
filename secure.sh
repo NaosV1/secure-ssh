@@ -95,7 +95,7 @@ log "Les logs seront sauvegardés dans : $LOG_FILE"
 # Vérifier la distribution
 if ! grep -qE "Ubuntu|Debian" /etc/os-release; then
     log_warning "Ce script est conçu pour Ubuntu/Debian. Continuer ? (y/n)"
-    read -r response
+    read -r response < /dev/tty
     [[ ! "$response" =~ ^[Yy]$ ]] && exit 0
 fi
 
@@ -106,27 +106,39 @@ DEBIAN_FRONTEND=noninteractive apt upgrade -y || log_warning "Certaines mises à
 
 # --- Création d'un utilisateur non-root ---
 log "=== 👤 Création d'un utilisateur administrateur ==="
-echo "Le nom doit : commencer par une lettre minuscule ou _, contenir 3-32 caractères (lettres, chiffres, - ou _)"
-while true; do
-    read -rp "Entrez le nom du nouvel utilisateur admin (ex: adminvps) : " NEWUSER
-    # Nettoyer les espaces au début et à la fin
-    NEWUSER=$(echo "$NEWUSER" | xargs)
-    if validate_username "$NEWUSER"; then
-        break
+
+# Permettre de passer le nom d'utilisateur via variable d'environnement
+if [[ -n "${VPS_USER:-}" ]]; then
+    NEWUSER="$VPS_USER"
+    log "Utilisation du nom d'utilisateur depuis VPS_USER: $NEWUSER"
+    if ! validate_username "$NEWUSER"; then
+        log_error "Le nom d'utilisateur fourni via VPS_USER est invalide"
+        exit 1
     fi
-    echo ""
-done
+else
+    echo "Le nom doit : commencer par une lettre minuscule ou _, contenir 3-32 caractères (lettres, chiffres, - ou _)"
+    while true; do
+        read -rp "Entrez le nom du nouvel utilisateur admin (ex: adminvps) : " NEWUSER < /dev/tty
+        # Nettoyer les espaces au début et à la fin (compatible avec pipe)
+        NEWUSER="${NEWUSER#"${NEWUSER%%[![:space:]]*}"}"  # Supprimer espaces au début
+        NEWUSER="${NEWUSER%"${NEWUSER##*[![:space:]]}"}"  # Supprimer espaces à la fin
+        if validate_username "$NEWUSER"; then
+            break
+        fi
+        echo ""
+    done
+fi
 
 adduser --gecos "" "$NEWUSER" || { log_error "Échec de création de l'utilisateur"; exit 1; }
 usermod -aG sudo "$NEWUSER"
 log "Utilisateur $NEWUSER créé et ajouté au groupe sudo"
 
 # Configurer SSH key (optionnel mais recommandé)
-read -rp "Voulez-vous configurer une clé SSH pour $NEWUSER ? (y/n) : " setup_key
+read -rp "Voulez-vous configurer une clé SSH pour $NEWUSER ? (y/n) : " setup_key < /dev/tty
 if [[ "$setup_key" =~ ^[Yy]$ ]]; then
     su - "$NEWUSER" -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
     log "Entrez votre clé SSH publique (ou laissez vide pour sauter) :"
-    read -r ssh_key
+    read -r ssh_key < /dev/tty
     if [[ -n "$ssh_key" ]]; then
         echo "$ssh_key" | su - "$NEWUSER" -c "tee ~/.ssh/authorized_keys > /dev/null"
         su - "$NEWUSER" -c "chmod 600 ~/.ssh/authorized_keys"
@@ -139,11 +151,11 @@ log "=== 🔐 Configuration SSH ==="
 backup_file "/etc/ssh/sshd_config"
 
 # Utiliser un port personnalisé ?
-read -rp "Utiliser le port SSH $SSH_PORT ? (y pour oui, n pour choisir) : " use_default_port
+read -rp "Utiliser le port SSH $SSH_PORT ? (y pour oui, n pour choisir) : " use_default_port < /dev/tty
 CUSTOM_SSH_PORT="$SSH_PORT"
 if [[ ! "$use_default_port" =~ ^[Yy]$ ]]; then
     while true; do
-        read -rp "Entrez le nouveau port SSH (1024-65535) : " CUSTOM_SSH_PORT
+        read -rp "Entrez le nouveau port SSH (1024-65535) : " CUSTOM_SSH_PORT < /dev/tty
         if validate_port "$CUSTOM_SSH_PORT"; then
             break
         fi
@@ -300,7 +312,7 @@ log "Paramètres de sécurité système appliqués"
 # --- Netdata sécurisé ---
 log "=== 📊 Installation de Netdata (monitoring) ==="
 
-read -rp "Installer Netdata ? (y/n) : " install_netdata
+read -rp "Installer Netdata ? (y/n) : " install_netdata < /dev/tty
 if [[ "$install_netdata" =~ ^[Yy]$ ]]; then
     # Installation non-interactive
     bash <(curl -Ss https://my-netdata.io/kickstart.sh) --dont-wait --disable-telemetry
