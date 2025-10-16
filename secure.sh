@@ -129,8 +129,30 @@ else
     done
 fi
 
-adduser --gecos "" "$NEWUSER" || { log_error "Échec de création de l'utilisateur"; exit 1; }
+# Créer l'utilisateur avec mot de passe désactivé temporairement
+adduser --disabled-password --gecos "" "$NEWUSER" || { log_error "Échec de création de l'utilisateur"; exit 1; }
 usermod -aG sudo "$NEWUSER"
+
+# Définir le mot de passe
+if [[ -n "${VPS_PASSWORD:-}" ]]; then
+    # Mot de passe fourni via variable d'environnement
+    log "Définition du mot de passe depuis VPS_PASSWORD"
+    echo "$NEWUSER:$VPS_PASSWORD" | chpasswd
+    if [[ $? -eq 0 ]]; then
+        log "Mot de passe défini avec succès"
+    else
+        log_error "Échec de définition du mot de passe"
+    fi
+else
+    # Demander le mot de passe interactivement
+    log "Définition du mot de passe pour $NEWUSER"
+    echo ""
+    if ! passwd "$NEWUSER" < /dev/tty; then
+        log_error "Échec de définition du mot de passe"
+        log_warning "Vous pourrez définir le mot de passe plus tard avec : sudo passwd $NEWUSER"
+    fi
+fi
+
 log "Utilisateur $NEWUSER créé et ajouté au groupe sudo"
 
 # Configurer SSH key (optionnel mais recommandé)
