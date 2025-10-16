@@ -52,14 +52,28 @@ backup_file() {
 
 validate_username() {
     local username="$1"
+    # Nettoyer les espaces
+    username="${username// /}"
+
+    # Vérifier si vide
+    if [[ -z "$username" ]]; then
+        log_error "Le nom d'utilisateur ne peut pas être vide"
+        return 1
+    fi
+
+    # Vérifier le format (3-32 caractères, commence par lettre ou _, contient lettres, chiffres, - ou _)
     if [[ ! "$username" =~ ^[a-z_][a-z0-9_-]{2,31}$ ]]; then
-        log_error "Nom d'utilisateur invalide. Utilisez uniquement des lettres minuscules, chiffres, - et _"
+        log_error "Nom invalide. Format: 3-32 caractères, commence par lettre minuscule ou _, puis lettres, chiffres, - ou _"
+        log_error "Exemples valides: admin, adminvps, webmaster, deploy_user"
         return 1
     fi
+
+    # Vérifier si l'utilisateur existe déjà
     if id "$username" &>/dev/null; then
-        log_error "L'utilisateur $username existe déjà"
+        log_error "L'utilisateur '$username' existe déjà"
         return 1
     fi
+
     return 0
 }
 
@@ -92,11 +106,15 @@ DEBIAN_FRONTEND=noninteractive apt upgrade -y || log_warning "Certaines mises à
 
 # --- Création d'un utilisateur non-root ---
 log "=== 👤 Création d'un utilisateur administrateur ==="
+echo "Le nom doit : commencer par une lettre minuscule ou _, contenir 3-32 caractères (lettres, chiffres, - ou _)"
 while true; do
     read -rp "Entrez le nom du nouvel utilisateur admin (ex: adminvps) : " NEWUSER
+    # Nettoyer les espaces au début et à la fin
+    NEWUSER=$(echo "$NEWUSER" | xargs)
     if validate_username "$NEWUSER"; then
         break
     fi
+    echo ""
 done
 
 adduser --gecos "" "$NEWUSER" || { log_error "Échec de création de l'utilisateur"; exit 1; }
