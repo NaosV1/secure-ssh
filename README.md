@@ -1,229 +1,324 @@
-# Améliorations du Script de Sécurisation VPS
+# 🔒 Script de Sécurisation VPS - Secure SSH
 
-## Comparaison : secure.sh vs secure_improved.sh
+[![Version](https://img.shields.io/badge/version-2.0-blue.svg)](https://github.com/NaosV1/secure-ssh)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Debian](https://img.shields.io/badge/debian-10%2B-red.svg)](https://www.debian.org/)
+[![Ubuntu](https://img.shields.io/badge/ubuntu-18.04%2B-orange.svg)](https://ubuntu.com/)
 
-### Améliorations principales
+Script Bash professionnel pour sécuriser automatiquement vos serveurs VPS Ubuntu/Debian en quelques minutes.
 
-#### 1. Gestion des erreurs robuste
-**Avant :**
+## ✨ Fonctionnalités
+
+- ✅ **Mise à jour complète** du système
+- 👤 **Création utilisateur admin** non-root avec sudo
+- 🔐 **Durcissement SSH** (changement port, désactivation root, limitations)
+- 🔥 **Pare-feu UFW** avec règles de base
+- 🧱 **Fail2ban** contre les attaques par force brute
+- 🛡️ **Hardening système** (sysctl, kernel parameters)
+- 📊 **Netdata** pour le monitoring (optionnel, sécurisé sur localhost)
+- 🔄 **Mises à jour automatiques** de sécurité
+- 💾 **Backups automatiques** des configurations
+- 📝 **Logging détaillé** de toutes les opérations
+- 🌐 **Support IPv6** complet
+
+## 🚀 Installation rapide
+
+### Méthode 1 : Installation en une commande (Interactive)
+
 ```bash
-apt update -y && apt upgrade -y
+curl -fsSL https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh | sudo bash
 ```
-**Après :**
-```bash
-set -euo pipefail  # Exit on error, undefined var, pipe failure
-apt update -y || { log_error "Échec de apt update"; exit 1; }
-```
-- Le script s'arrête immédiatement en cas d'erreur critique
-- Gestion explicite des erreurs pour chaque commande importante
-- Variables non définies détectées automatiquement
 
-#### 2. Validation des entrées utilisateur
-**Avant :**
+### Méthode 2 : Installation semi-automatique
+
+Prédéfinir le nom d'utilisateur :
+
 ```bash
-read -p "Entrez le nom du nouvel utilisateur admin : " NEWUSER
-adduser $NEWUSER  # Pas de validation !
+curl -fsSL https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh | sudo VPS_USER=adminvps bash
 ```
-**Après :**
+
+### Méthode 3 : Installation entièrement automatique
+
+⚠️ **Attention** : Le mot de passe sera visible dans l'historique !
+
 ```bash
-validate_username() {
-    if [[ ! "$username" =~ ^[a-z_][a-z0-9_-]{2,31}$ ]]; then
-        log_error "Nom d'utilisateur invalide"
-        return 1
-    fi
+curl -fsSL https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh | \
+  sudo VPS_USER=adminvps VPS_PASSWORD='MotDePasse123!' bash
+```
+
+### Méthode 4 : Téléchargement et inspection
+
+Pour inspecter le script avant de l'exécuter :
+
+```bash
+wget https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh
+less secure.sh
+chmod +x secure.sh
+sudo ./secure.sh
+```
+
+## 📋 Prérequis
+
+- **OS** : Ubuntu 18.04+ ou Debian 10+
+- **Accès** : Root ou sudo
+- **Connexion** : Internet active
+- **Temps** : 8-12 minutes d'exécution
+
+## 🔧 Configuration appliquée
+
+### SSH (Port 28 par défaut)
+- ✅ Root login désactivé
+- ✅ Port personnalisable
+- ✅ MaxAuthTries: 3
+- ✅ MaxSessions: 5
+- ✅ ClientAlive: 300s
+- ✅ AllowUsers configuré
+
+### Pare-feu UFW
+- ✅ SSH (port personnalisé)
+- ✅ HTTP (80)
+- ✅ HTTPS (443)
+- ✅ Rate limiting sur SSH
+- ✅ IPv4 + IPv6
+
+### Fail2ban
+- ✅ Protection SSH
+- ✅ Protection SSH-DDoS
+- ✅ Ban: 1h après 5 tentatives
+- ✅ Findtime: 10 minutes
+
+### Sysctl Hardening
+- ✅ SYN cookies (anti SYN flood)
+- ✅ IP spoofing protection
+- ✅ ICMP redirects désactivés
+- ✅ Source routing désactivé
+- ✅ ASLR activé
+- ✅ Kernel pointer restriction
+
+## 📖 Documentation détaillée
+
+- [Guide d'installation complet](INSTALL.md)
+- [Exemples d'automatisation](automation-examples.sh)
+- [Comparaison avec version originale](IMPROVEMENTS.md)
+
+## ⚠️ Important - Après l'installation
+
+**NE FERMEZ PAS** votre session SSH actuelle immédiatement !
+
+1. ✅ Ouvrez un **NOUVEL onglet/terminal**
+2. ✅ **Testez la connexion** avec le nouveau port et utilisateur
+3. ✅ **Seulement si ça marche**, fermez l'ancienne session
+
+```bash
+# Tester la nouvelle connexion
+ssh nouvel_user@votre_ip -p 28
+```
+
+Si vous ne pouvez pas vous reconnecter, retournez à votre ancienne session et restaurez la configuration :
+
+```bash
+sudo cp /root/config-backup-*/sshd_config /etc/ssh/sshd_config
+sudo systemctl restart ssh
+```
+
+## 🔍 Que fait exactement le script ?
+
+<details>
+<summary>Cliquez pour voir le détail des opérations</summary>
+
+1. **Vérifications initiales**
+   - Vérification root/sudo
+   - Vérification distribution (Ubuntu/Debian)
+   - Création des répertoires de backup et logs
+
+2. **Mise à jour système**
+   - `apt update && apt upgrade`
+   - Installation des paquets nécessaires
+
+3. **Création utilisateur**
+   - Validation du nom d'utilisateur
+   - Création avec `adduser`
+   - Ajout au groupe sudo
+   - Configuration du mot de passe
+   - Configuration clé SSH (optionnel)
+
+4. **Configuration SSH**
+   - Backup de `/etc/ssh/sshd_config`
+   - Création de `/etc/ssh/sshd_config.d/99-custom-security.conf`
+   - Changement de port
+   - Désactivation root login
+   - Limitation des tentatives
+   - Test de configuration avant restart
+
+5. **Pare-feu UFW**
+   - Installation UFW
+   - Configuration règles par défaut
+   - Ouverture ports SSH, HTTP, HTTPS
+   - Rate limiting
+   - Activation IPv6
+
+6. **Fail2ban**
+   - Installation Fail2ban
+   - Configuration jail SSH
+   - Configuration jail SSH-DDoS
+   - Activation service
+
+7. **Hardening système**
+   - Désactivation services inutiles
+   - Configuration sysctl (/etc/sysctl.d/99-security.conf)
+   - Application des paramètres
+
+8. **Netdata (optionnel)**
+   - Installation sécurisée
+   - Configuration localhost uniquement
+   - Désactivation télémétrie
+
+9. **Mises à jour automatiques**
+   - Installation unattended-upgrades
+   - Configuration mises à jour de sécurité automatiques
+
+10. **Résumé et logs**
+    - Affichage configuration finale
+    - Sauvegarde logs dans `/var/log/`
+    - Instructions de test
+
+</details>
+
+## 🛡️ Sécurité
+
+### Ce que le script NE FAIT PAS
+- ❌ Ne modifie pas les données utilisateur
+- ❌ Ne crée pas de backdoors
+- ❌ N'envoie pas de données externes (sauf Netdata si télémétrie activée)
+- ❌ Ne désactive pas l'accès SSH existant avant de configurer le nouveau
+
+### Bonnes pratiques
+- ✅ Toujours tester la nouvelle connexion SSH avant de fermer l'ancienne
+- ✅ Conserver les backups de configuration
+- ✅ Consulter les logs en cas de problème
+- ✅ Utiliser des clés SSH plutôt que des mots de passe
+- ✅ Changer le mot de passe par défaut si utilisation automatisée
+
+## 🔄 Automatisation avancée
+
+### Avec Ansible
+
+```yaml
+- name: Sécuriser VPS
+  hosts: all
+  tasks:
+    - name: Exécuter secure-ssh
+      shell: |
+        curl -fsSL https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh | \
+        VPS_USER=admin VPS_PASSWORD='{{ vault_password }}' bash
+```
+
+### Avec Terraform
+
+```hcl
+resource "null_resource" "secure" {
+  provisioner "remote-exec" {
+    inline = [
+      "curl -fsSL https://raw.githubusercontent.com/NaosV1/secure-ssh/main/secure.sh | VPS_USER=admin VPS_PASSWORD='${var.admin_pass}' bash"
+    ]
+  }
 }
 ```
-- Validation du format du nom d'utilisateur (selon les standards Linux)
-- Vérification que l'utilisateur n'existe pas déjà
-- Validation du numéro de port SSH (1024-65535)
 
-#### 3. Backup automatique
-**Avant :** Aucun backup
-**Après :**
+Plus d'exemples dans [automation-examples.sh](automation-examples.sh).
+
+## 📊 Monitoring post-installation
+
+### Accéder à Netdata (si installé)
+
+Netdata écoute sur localhost pour la sécurité. Créez un tunnel SSH :
+
 ```bash
-backup_file "/etc/ssh/sshd_config"
-```
-- Tous les fichiers de configuration sont sauvegardés avant modification
-- Timestamp unique pour chaque exécution
-- Possibilité de rollback en cas de problème
-
-#### 4. Logging complet
-**Avant :** Messages simples avec echo
-**Après :**
-```bash
-readonly LOG_FILE="/var/log/vps-secure-$(date +%Y%m%d-%H%M%S).log"
-log() {
-    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $*" | tee -a "$LOG_FILE"
-}
-```
-- Tous les événements sont loggés avec timestamp
-- Couleurs pour différencier info/warning/error
-- Logs persistants pour audit
-
-#### 5. Sécurité SSH renforcée
-**Avant :**
-```bash
-sed -i "s/#Port 22/Port $SSH_PORT/g" /etc/ssh/sshd_config
-sed -i "s/PermitRootLogin yes/PermitRootLogin no/g" /etc/ssh/sshd_config
-```
-**Après :**
-```bash
-cat >> /etc/ssh/sshd_config.d/99-custom-security.conf <<EOF
-Port $CUSTOM_SSH_PORT
-PermitRootLogin no
-PasswordAuthentication yes
-PubkeyAuthentication yes
-MaxAuthTries 3
-MaxSessions 5
-ClientAliveInterval 300
-AllowUsers $NEWUSER
-Protocol 2
-EOF
-
-# Test de configuration avant restart
-if sshd -t; then
-    systemctl restart ssh
-else
-    log_error "Configuration invalide ! Restauration..."
-    cp "$BACKUP_DIR/sshd_config" /etc/ssh/sshd_config
-fi
-```
-- Configuration dans un fichier dédié (meilleure pratique)
-- Limitation des tentatives d'authentification
-- Test de configuration avant redémarrage
-- Rollback automatique si erreur
-
-#### 6. Netdata sécurisé
-**Avant :**
-```bash
-bash <(curl -Ss https://my-netdata.io/kickstart.sh) --dont-wait
-# Accessible publiquement sur :19999 !
-```
-**Après :**
-```bash
-bash <(curl -Ss https://my-netdata.io/kickstart.sh) --dont-wait --disable-telemetry
-
-cat > /etc/netdata/netdata.conf <<EOF
-[web]
-    bind to = 127.0.0.1  # Localhost uniquement
-EOF
-```
-- Netdata écoute uniquement sur localhost
-- Accès via tunnel SSH seulement
-- Désactivation de la télémétrie
-
-#### 7. Protection iptables vs UFW
-**Avant :** Utilise UFW ET iptables (conflit potentiel)
-**Après :** Utilise UFW uniquement (recommandé pour Ubuntu/Debian)
-- UFW est une interface de haut niveau pour iptables
-- Évite les conflits de règles
-- Plus facile à maintenir
-
-#### 8. Durcissement système (sysctl)
-**Nouveau :**
-```bash
-cat >> /etc/sysctl.d/99-security.conf <<EOF
-net.ipv4.tcp_syncookies = 1
-net.ipv4.conf.all.rp_filter = 1
-net.ipv4.conf.all.accept_redirects = 0
-kernel.randomize_va_space = 2
-kernel.dmesg_restrict = 1
-EOF
-```
-- Protection contre SYN flood
-- Désactivation des redirects ICMP
-- ASLR activé
-- Restriction des logs kernel
-
-#### 9. Mises à jour automatiques
-**Nouveau :**
-```bash
-apt install unattended-upgrades -y
-# Configuration pour installer automatiquement les mises à jour de sécurité
-```
-- Patches de sécurité appliqués automatiquement
-- Réduit la fenêtre d'exposition aux vulnérabilités
-
-#### 10. Support IPv6
-**Avant :** Ignoré
-**Après :**
-```bash
-if [[ -f /proc/net/if_inet6 ]]; then
-    sed -i 's/IPV6=no/IPV6=yes/' /etc/default/ufw
-fi
-```
-- UFW protège aussi IPv6
-- Sysctl configuré pour IPv6
-
-#### 11. Vérifications et sécurités
-**Nouveau :**
-- Vérification que le script est exécuté en root
-- Vérification de la distribution (Ubuntu/Debian)
-- Port SSH personnalisable de manière interactive
-- Configuration de clé SSH optionnelle
-- Test de connexion avant de fermer la session
-- AllowUsers pour restreindre l'accès SSH
-
-## Utilisation
-
-### Script original
-```bash
-sudo bash secure.sh
+ssh -L 19999:localhost:19999 user@votre_ip -p 28
 ```
 
-### Script amélioré
+Puis accédez à http://localhost:19999
+
+### Vérifier Fail2ban
+
 ```bash
-sudo bash secure_improved.sh
+sudo fail2ban-client status sshd
 ```
 
-## En cas de problème
-
-Le script amélioré crée des backups dans `/root/config-backup-[timestamp]/`. Pour restaurer :
+### Vérifier UFW
 
 ```bash
-# Exemple pour SSH
+sudo ufw status verbose
+```
+
+## 🐛 Dépannage
+
+### SSH ne fonctionne plus après le script
+
+1. Accédez via console VPS (interface web provider)
+2. Restaurez la config :
+```bash
 cp /root/config-backup-*/sshd_config /etc/ssh/sshd_config
 systemctl restart ssh
 ```
 
-## Recommandations supplémentaires
+### Port SSH bloqué par le firewall
 
-### Après exécution du script :
+```bash
+sudo ufw allow 28/tcp
+sudo ufw reload
+```
 
-1. **Configurer l'authentification par clé SSH** (plus sécurisé que mot de passe) :
-   ```bash
-   ssh-copy-id -p [PORT] user@server
-   ```
-   Puis désactiver PasswordAuthentication dans `/etc/ssh/sshd_config.d/99-custom-security.conf`
+### Utilisateur ne peut pas sudo
 
-2. **Configurer les alertes Fail2ban** par email :
-   ```bash
-   apt install mailutils -y
-   # Configurer destemail dans /etc/fail2ban/jail.local
-   ```
+```bash
+sudo usermod -aG sudo nom_utilisateur
+```
 
-3. **Installer et configurer un outil de détection d'intrusion** :
-   ```bash
-   apt install aide rkhunter chkrootkit -y
-   ```
+## 📝 Logs
 
-4. **Mettre en place une rotation des logs** :
-   ```bash
-   # Déjà configuré par défaut sur Ubuntu/Debian
-   # Vérifier : /etc/logrotate.d/
-   ```
+Tous les logs sont sauvegardés dans :
+```
+/var/log/vps-secure-YYYYMMDD-HHMMSS.log
+```
 
-5. **Configurer un reverse proxy** (nginx/traefik) pour les services web
+Les backups de configuration dans :
+```
+/root/config-backup-YYYYMMDD-HHMMSS/
+```
 
-6. **Activer 2FA pour SSH** :
-   ```bash
-   apt install libpam-google-authenticator -y
-   google-authenticator
-   ```
+## 🤝 Contribution
 
-## Différences de performance
+Les contributions sont les bienvenues ! N'hésitez pas à :
+- 🐛 Reporter des bugs
+- 💡 Proposer des améliorations
+- 📖 Améliorer la documentation
+- ⭐ Mettre une étoile si le projet vous est utile
 
-- Script original : ~5-10 minutes
-- Script amélioré : ~8-12 minutes (backups + validations supplémentaires)
+## 📜 Licence
 
-Le léger surplus de temps est largement compensé par la sécurité et la fiabilité accrues.
+Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+
+## ⚠️ Avertissement
+
+Ce script modifie la configuration système de votre serveur. Bien qu'il ait été testé, utilisez-le à vos propres risques. Toujours :
+- Faire un backup de vos données importantes
+- Tester sur un serveur de développement d'abord
+- Garder un accès console au serveur (interface web provider)
+
+## 👨‍💻 Auteur
+
+**NaosV1**
+- GitHub: [@NaosV1](https://github.com/NaosV1)
+- Repository: [secure-ssh](https://github.com/NaosV1/secure-ssh)
+
+## 🙏 Remerciements
+
+Basé sur les meilleures pratiques de sécurité Linux et les recommandations de :
+- [CIS Benchmarks](https://www.cisecurity.org/cis-benchmarks/)
+- [ANSSI](https://www.ssi.gouv.fr/)
+- [Ubuntu Security Guide](https://ubuntu.com/security)
+
+---
+
+**⭐ Si ce projet vous aide, n'hésitez pas à lui donner une étoile !**
