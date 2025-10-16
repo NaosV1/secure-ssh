@@ -336,20 +336,40 @@ log "=== 📊 Installation de Netdata (monitoring) ==="
 
 read -rp "Installer Netdata ? (y/n) : " install_netdata < /dev/tty
 if [[ "$install_netdata" =~ ^[Yy]$ ]]; then
-    # Installation non-interactive
-    bash <(curl -Ss https://my-netdata.io/kickstart.sh) --dont-wait --disable-telemetry
+    log "Installation de Netdata..."
 
-    # Sécuriser Netdata - écouter uniquement sur localhost
-    cat > /etc/netdata/netdata.conf <<EOF
+    # Télécharger et installer Netdata avec l'URL correcte
+    if curl -fsSL https://get.netdata.cloud/kickstart.sh | bash -s -- --non-interactive --disable-telemetry; then
+        # Attendre que Netdata soit installé
+        sleep 5
+
+        # Sécuriser Netdata - écouter uniquement sur localhost
+        if [[ -f /etc/netdata/netdata.conf ]]; then
+            # Backup de la config par défaut
+            backup_file "/etc/netdata/netdata.conf"
+
+            # Créer la configuration personnalisée
+            cat > /etc/netdata/netdata.conf <<EOF
+[global]
+    bind to = 127.0.0.1
+
 [web]
     bind to = 127.0.0.1
 EOF
 
-    systemctl restart netdata
+            # Redémarrer Netdata
+            systemctl restart netdata 2>/dev/null || service netdata restart 2>/dev/null || true
 
-    log "Netdata installé et configuré pour écouter uniquement sur localhost"
-    log "Pour y accéder, créez un tunnel SSH : ssh -L 19999:localhost:19999 $NEWUSER@votre_ip -p $CUSTOM_SSH_PORT"
-    log "Puis accédez à http://localhost:19999 sur votre machine locale"
+            log "Netdata installé et configuré pour écouter uniquement sur localhost"
+            log "Pour y accéder, créez un tunnel SSH : ssh -L 19999:localhost:19999 $NEWUSER@votre_ip -p $CUSTOM_SSH_PORT"
+            log "Puis accédez à http://localhost:19999 sur votre machine locale"
+        else
+            log_warning "Netdata installé mais fichier de configuration non trouvé"
+        fi
+    else
+        log_error "Échec de l'installation de Netdata"
+        log_warning "Vous pouvez l'installer manuellement plus tard avec : bash <(curl -Ss https://get.netdata.cloud/kickstart.sh)"
+    fi
 fi
 
 # --- Mises à jour automatiques ---
