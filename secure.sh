@@ -227,15 +227,25 @@ log "=== 🔐 Configuration SSH ==="
 backup_file "/etc/ssh/sshd_config"
 
 # Utiliser un port personnalisé ?
-read -rp "Utiliser le port SSH $SSH_PORT ? (y pour oui, n pour choisir) : " use_default_port < /dev/tty
-CUSTOM_SSH_PORT="$SSH_PORT"
-if [[ ! "$use_default_port" =~ ^[Yy]$ ]]; then
-    while true; do
-        read -rp "Entrez le nouveau port SSH (1024-65535) : " CUSTOM_SSH_PORT < /dev/tty
-        if validate_port "$CUSTOM_SSH_PORT"; then
-            break
-        fi
-    done
+if [[ -n "${VPS_SSH_PORT:-}" ]]; then
+    if validate_port "$VPS_SSH_PORT"; then
+        CUSTOM_SSH_PORT="$VPS_SSH_PORT"
+        log "Port SSH défini via VPS_SSH_PORT : $CUSTOM_SSH_PORT"
+    else
+        log_error "VPS_SSH_PORT invalide : $VPS_SSH_PORT. Utilisation du port par défaut $SSH_PORT."
+        CUSTOM_SSH_PORT="$SSH_PORT"
+    fi
+else
+    read -rp "Utiliser le port SSH $SSH_PORT ? (y pour oui, n pour choisir) : " use_default_port < /dev/tty
+    CUSTOM_SSH_PORT="$SSH_PORT"
+    if [[ ! "$use_default_port" =~ ^[Yy]$ ]]; then
+        while true; do
+            read -rp "Entrez le nouveau port SSH (1024-65535) : " CUSTOM_SSH_PORT < /dev/tty
+            if validate_port "$CUSTOM_SSH_PORT"; then
+                break
+            fi
+        done
+    fi
 fi
 
 # Configuration SSH sécurisée - AUTHENTIFICATION PAR CLÉ UNIQUEMENT
@@ -411,7 +421,11 @@ log "Paramètres de sécurité système appliqués"
 # --- Netdata sécurisé ---
 log "=== 📊 Installation de Netdata (monitoring) ==="
 
-read -rp "Installer Netdata ? (y/n) : " install_netdata < /dev/tty
+if [[ -n "${VPS_INSTALL_NETDATA:-}" ]]; then
+    install_netdata="$VPS_INSTALL_NETDATA"
+else
+    read -rp "Installer Netdata ? (y/n) : " install_netdata < /dev/tty
+fi
 if [[ "$install_netdata" =~ ^[Yy]$ ]]; then
     log "Installation de Netdata..."
 
